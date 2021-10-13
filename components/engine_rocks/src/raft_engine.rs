@@ -7,12 +7,23 @@ use engine_traits::{
     Error, Iterable, KvEngine, MiscExt, Mutable, Peekable, RaftEngine, RaftEngineReadOnly,
     RaftLogBatch, Result, SyncMutable, WriteBatch, WriteBatchExt, WriteOptions, CF_DEFAULT,
 };
-use kvproto::raft_serverpb::RaftLocalState;
+use kvproto::raft_serverpb::{RaftApplyState, RaftLocalState};
 use protobuf::Message;
 use raft::eraftpb::Entry;
 use tikv_util::{box_err, box_try};
 
 const RAFT_LOG_MULTI_GET_CNT: u64 = 8;
+
+impl RocksEngine {
+    fn seek_first_index(&self, raft_group_id: u64) -> Result<Option<u64>> {
+        let start_key = keys::raft_log_key(raft_group_id, 0);
+        let prefix = keys::raft_log_prefix(raft_group_id);
+        match self.seek(&start_key)? {
+            Some((k, _)) if k.starts_with(&prefix) => Ok(Some(box_try!(keys::raft_log_index(&k)))),
+            _ => Ok(None),
+        }
+    }
+}
 
 impl RaftEngineReadOnly for RocksEngine {
     fn get_raft_state(&self, raft_group_id: u64) -> Result<Option<RaftLocalState>> {
@@ -138,25 +149,26 @@ impl RaftEngine for RocksEngine {
     fn clean(
         &self,
         raft_group_id: u64,
-        state: &RaftLocalState,
+        local_state: &RaftLocalState,
+        apply_state: &RaftApplyState,
         batch: &mut Self::LogBatch,
     ) -> Result<()> {
         batch.delete(&keys::raft_state_key(raft_group_id))?;
-        let seek_key = keys::raft_log_key(raft_group_id, 0);
-        let prefix = keys::raft_log_prefix(raft_group_id);
-        if let Some((key, _)) = self.seek(&seek_key)? {
-            if !key.starts_with(&prefix) {
+        let first_index = if apply_state.has_truncated_state()
+            && apply_state.get_truncated_state().get_index() != 0
+        {
+            apply_state.get_truncated_state().get_index() + 1
+        } else {
+            match self.seek_first_index(raft_group_id)? {
+                Some(idx) => idx,
                 // No raft logs for the raft group.
-                return Ok(());
+                None => return Ok(()),
             }
-            let first_index = match keys::raft_log_index(&key) {
-                Ok(index) => index,
-                Err(_) => return Ok(()),
-            };
-            for index in first_index..=state.last_index {
-                let key = keys::raft_log_key(raft_group_id, index);
-                batch.delete(&key)?;
-            }
+        };
+
+        for index in first_index..=local_state.last_index {
+            let key = keys::raft_log_key(raft_group_id, index);
+            batch.delete(&key)?;
         }
         Ok(())
     }
@@ -177,13 +189,11 @@ impl RaftEngine for RocksEngine {
             return Ok(0);
         }
         if from == 0 {
-            let start_key = keys::raft_log_key(raft_group_id, 0);
-            let prefix = keys::raft_log_prefix(raft_group_id);
-            match self.seek(&start_key)? {
-                Some((k, _)) if k.starts_with(&prefix) => from = box_try!(keys::raft_log_index(&k)),
+            from = match self.seek_first_index(raft_group_id)? {
+                Some(idx) => idx,
                 // No need to gc.
-                _ => return Ok(0),
-            }
+                None => return Ok(0),
+            };
         }
 
         let mut raft_wb = self.write_batch_with_cap(4 * 1024);

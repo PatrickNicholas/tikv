@@ -1305,7 +1305,14 @@ where
         raft_wb: &mut ER::LogBatch,
     ) -> Result<()> {
         let region_id = self.get_region_id();
-        clear_meta(&self.engines, kv_wb, raft_wb, region_id, &self.raft_state)?;
+        clear_meta(
+            &self.engines,
+            kv_wb,
+            raft_wb,
+            region_id,
+            &self.raft_state,
+            &self.apply_state,
+        )?;
         self.cache = EntryCache::default();
         Ok(())
     }
@@ -1627,6 +1634,7 @@ pub fn clear_meta<EK, ER>(
     raft_wb: &mut ER::LogBatch,
     region_id: u64,
     raft_state: &RaftLocalState,
+    apply_state: &RaftApplyState,
 ) -> Result<()>
 where
     EK: KvEngine,
@@ -1635,7 +1643,11 @@ where
     let t = Instant::now();
     box_try!(kv_wb.delete_cf(CF_RAFT, &keys::region_state_key(region_id)));
     box_try!(kv_wb.delete_cf(CF_RAFT, &keys::apply_state_key(region_id)));
-    box_try!(engines.raft.clean(region_id, raft_state, raft_wb));
+    box_try!(
+        engines
+            .raft
+            .clean(region_id, raft_state, apply_state, raft_wb)
+    );
 
     info!(
         "finish clear peer meta";

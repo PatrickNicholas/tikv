@@ -1,7 +1,7 @@
 // Copyright 2021 TiKV Project Authors. Licensed under Apache-2.0.
 
 use crate::*;
-use kvproto::raft_serverpb::RaftLocalState;
+use kvproto::raft_serverpb::{RaftApplyState, RaftLocalState};
 use raft::eraftpb::Entry;
 
 pub trait RaftEngineReadOnly: Sync + Send + 'static {
@@ -44,7 +44,8 @@ pub trait RaftEngine: RaftEngineReadOnly + Clone + Sync + Send + 'static {
     fn clean(
         &self,
         raft_group_id: u64,
-        state: &RaftLocalState,
+        local_state: &RaftLocalState,
+        apply_state: &RaftApplyState,
         batch: &mut Self::LogBatch,
     ) -> Result<()>;
 

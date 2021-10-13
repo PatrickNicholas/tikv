@@ -6,7 +6,7 @@ use std::path::Path;
 use engine_traits::{
     CacheStats, RaftEngine, RaftEngineReadOnly, RaftLogBatch as RaftLogBatchTrait, Result,
 };
-use kvproto::raft_serverpb::RaftLocalState;
+use kvproto::raft_serverpb::{RaftApplyState, RaftLocalState};
 use raft::eraftpb::Entry;
 use raft_engine::{
     Command, Error as RaftEngineError, LogBatch, MessageExt, RaftLogEngine as RawRaftEngine,
@@ -147,6 +147,7 @@ impl RaftEngine for RaftLogEngine {
         &self,
         raft_group_id: u64,
         _: &RaftLocalState,
+        _: &RaftApplyState,
         batch: &mut RaftLogBatch,
     ) -> Result<()> {
         batch.0.add_command(raft_group_id, Command::Clean);

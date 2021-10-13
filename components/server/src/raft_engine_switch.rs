@@ -7,7 +7,7 @@ use engine_traits::{
     RaftEngineReadOnly, RaftLogBatch, Range, SeekKey,
 };
 use file_system::delete_dir_if_exist;
-use kvproto::raft_serverpb::RaftLocalState;
+use kvproto::raft_serverpb::{RaftApplyState, RaftLocalState};
 use protobuf::Message;
 use raft::eraftpb::Entry;
 use raft_log_engine::RaftLogEngine;
@@ -45,8 +45,11 @@ fn rename_to_tmp_dir<P1: AsRef<Path>, P2: AsRef<Path>>(src: P1, dst: P2) {
 fn clear_raft_engine(engine: &RaftLogEngine) -> Result<(), EngineError> {
     let mut batch_to_clean = engine.log_batch(0);
     for id in engine.raft_groups() {
-        let state = engine.get_raft_state(id)?.unwrap();
-        engine.clean(id, &state, &mut batch_to_clean)?;
+        let raft_state = engine.get_raft_state(id)?.unwrap();
+        let first_index = engine.first_index(id).unwrap_or(0);
+        let mut apply_state = RaftApplyState::default();
+        apply_state.mut_truncated_state().set_index(first_index);
+        engine.clean(id, &raft_state, &apply_state, &mut batch_to_clean)?;
     }
     engine.consume(&mut batch_to_clean, true).map(|_| ())
 }

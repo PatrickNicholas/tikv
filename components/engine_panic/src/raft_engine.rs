@@ -3,7 +3,7 @@
 use crate::engine::PanicEngine;
 use crate::write_batch::PanicWriteBatch;
 use engine_traits::{Error, RaftEngine, RaftEngineReadOnly, RaftLogBatch, Result};
-use kvproto::raft_serverpb::RaftLocalState;
+use kvproto::raft_serverpb::{RaftApplyState, RaftLocalState};
 use raft::eraftpb::Entry;
 
 impl RaftEngineReadOnly for PanicEngine {
@@ -55,7 +55,8 @@ impl RaftEngine for PanicEngine {
     fn clean(
         &self,
         raft_group_id: u64,
-        state: &RaftLocalState,
+        local_state: &RaftLocalState,
+        apply_state: &RaftApplyState,
         batch: &mut Self::LogBatch,
     ) -> Result<()> {
         panic!()

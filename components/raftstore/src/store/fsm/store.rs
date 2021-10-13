@@ -28,7 +28,9 @@ use kvproto::metapb::{self, Region, RegionEpoch};
 use kvproto::pdpb::QueryStats;
 use kvproto::pdpb::StoreStats;
 use kvproto::raft_cmdpb::{AdminCmdType, AdminRequest};
-use kvproto::raft_serverpb::{ExtraMessageType, PeerState, RaftMessage, RegionLocalState};
+use kvproto::raft_serverpb::{
+    ExtraMessageType, PeerState, RaftApplyState, RaftMessage, RegionLocalState,
+};
 use kvproto::replication_modepb::{ReplicationMode, ReplicationStatus};
 use protobuf::Message;
 use raft::StateRole;
@@ -996,7 +998,12 @@ impl<EK: KvEngine, ER: RaftEngine, T> RaftPollerBuilder<EK, ER, T> {
             if local_state.get_state() == PeerState::Tombstone {
                 tombstone_count += 1;
                 debug!("region is tombstone"; "region" => ?region, "store_id" => store_id);
-                self.clear_stale_meta(&mut kv_wb, &mut raft_wb, &local_state);
+                self.clear_stale_meta(
+                    &mut kv_wb,
+                    &mut raft_wb,
+                    &local_state,
+                    &RaftApplyState::default(),
+                );
                 return Ok(true);
             }
             if local_state.get_state() == PeerState::Applying {
@@ -1088,6 +1095,7 @@ impl<EK: KvEngine, ER: RaftEngine, T> RaftPollerBuilder<EK, ER, T> {
         kv_wb: &mut EK::WriteBatch,
         raft_wb: &mut ER::LogBatch,
         origin_state: &RegionLocalState,
+        apply_state: &RaftApplyState,
     ) {
         let rid = origin_state.get_region().get_id();
         let raft_state = match self.engines.raft.get_raft_state(rid).unwrap() {
@@ -1095,7 +1103,8 @@ impl<EK: KvEngine, ER: RaftEngine, T> RaftPollerBuilder<EK, ER, T> {
             None => return,
             Some(value) => value,
         };
-        peer_storage::clear_meta(&self.engines, kv_wb, raft_wb, rid, &raft_state).unwrap();
+        peer_storage::clear_meta(&self.engines, kv_wb, raft_wb, rid, &raft_state, apply_state)
+            .unwrap();
         let key = keys::region_state_key(rid);
         kv_wb.put_msg_cf(CF_RAFT, &key, origin_state).unwrap();
     }

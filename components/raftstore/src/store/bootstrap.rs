@@ -9,7 +9,7 @@ use engine_traits::{Engines, KvEngine, Mutable, RaftEngine, WriteBatch};
 use engine_traits::{CF_DEFAULT, CF_RAFT};
 
 use kvproto::metapb;
-use kvproto::raft_serverpb::{RaftLocalState, RegionLocalState, StoreIdent};
+use kvproto::raft_serverpb::{RaftApplyState, RaftLocalState, RegionLocalState, StoreIdent};
 use tikv_util::{box_err, box_try};
 
 pub fn initial_region(store_id: u64, region_id: u64, peer_id: u64) -> metapb::Region {
@@ -94,11 +94,12 @@ pub fn clear_prepare_bootstrap_cluster(
     region_id: u64,
 ) -> Result<()> {
     let mut wb = engines.raft.log_batch(1024);
-    box_try!(
-        engines
-            .raft
-            .clean(region_id, &RaftLocalState::default(), &mut wb)
-    );
+    box_try!(engines.raft.clean(
+        region_id,
+        &RaftLocalState::default(),
+        &RaftApplyState::default(),
+        &mut wb
+    ));
     box_try!(engines.raft.consume(&mut wb, true));
 
     let mut wb = engines.kv.write_batch();
