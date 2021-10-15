@@ -24,10 +24,10 @@ fn test_wait_for_apply_index() {
     let r1 = cluster.run_conf_change();
     let p2 = new_peer(2, 2);
     cluster.pd_client.must_add_peer(r1, p2.clone());
+    cluster.pd_client.must_none_pending_peer(p2.clone());
     let p3 = new_peer(3, 3);
     cluster.pd_client.must_add_peer(r1, p3.clone());
     cluster.must_put(b"k0", b"v0");
-    cluster.pd_client.must_none_pending_peer(p2.clone());
     cluster.pd_client.must_none_pending_peer(p3.clone());
 
     let region = cluster.get_region(b"k0");
@@ -83,10 +83,10 @@ fn test_duplicate_read_index_ctx() {
     let p1 = new_peer(1, 1);
     let p2 = new_peer(2, 2);
     cluster.pd_client.must_add_peer(r1, p2.clone());
+    cluster.pd_client.must_none_pending_peer(p2.clone());
     let p3 = new_peer(3, 3);
     cluster.pd_client.must_add_peer(r1, p3.clone());
     cluster.must_put(b"k0", b"v0");
-    cluster.pd_client.must_none_pending_peer(p2.clone());
     cluster.pd_client.must_none_pending_peer(p3.clone());
     let region = cluster.get_region(b"k0");
     assert_eq!(cluster.leader_of_region(region.get_id()).unwrap(), p1);
@@ -278,10 +278,10 @@ fn test_read_after_cleanup_range_for_snap() {
     let p1 = new_peer(1, 1);
     let p2 = new_peer(2, 2);
     cluster.pd_client.must_add_peer(r1, p2.clone());
+    cluster.pd_client.must_none_pending_peer(p2);
     let p3 = new_peer(3, 3);
     cluster.pd_client.must_add_peer(r1, p3.clone());
     cluster.must_put(b"k0", b"v0");
-    cluster.pd_client.must_none_pending_peer(p2);
     cluster.pd_client.must_none_pending_peer(p3.clone());
     let region = cluster.get_region(b"k0");
     assert_eq!(cluster.leader_of_region(region.get_id()).unwrap(), p1);
@@ -413,7 +413,9 @@ fn test_replica_read_after_transfer_leader() {
 
     let r = cluster.run_conf_change();
     assert_eq!(r, 1);
-    pd_client.must_add_peer(1, new_peer(2, 2));
+    let p2 = new_peer(2, 2);
+    pd_client.must_add_peer(1, p2.clone());
+    pd_client.must_none_pending_peer(p2);
     pd_client.must_add_peer(1, new_peer(3, 3));
 
     cluster.must_transfer_leader(1, new_peer(1, 1));
